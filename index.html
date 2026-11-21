@@ -1,21 +1,34 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PD–ET Digital Lab</title><link rel="stylesheet" href="style.css"></head><body>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="./style.css"><title>PD–ET Digital Lab V0.5</title></head><body>
 <main>
-<header><h1>PD–ET Digital Lab</h1><p>V0.4.1 · 手指对合与震颤视频分析 · 研究用途</p></header>
+<header class="hero"><h1>PD–ET Digital Lab V0.5</h1><p>手机30 fps视频逐帧运动学分析 · 研究原型</p></header>
 <section>
-<h2>视频运动学分析</h2>
-<p>浏览器本地分析上传的视频；程序不自动上传原始文件。首次打开会从本网站加载MediaPipe模型。</p>
-<label>研究编号</label><input id="subject" value="TEST001" maxlength="40">
-<label>任务</label><select id="task"><option value="finger">拇指—食指对合</option><option value="rest">静止性震颤</option><option value="posture">姿势性震颤</option></select>
-<label>手别</label><select id="side"><option>右手</option><option>左手</option></select>
-<label>视频文件</label><input id="file" type="file" accept="video/*">
-<button id="load">① 加载手部模型</button><button id="analyze">② 开始自动分析</button>
-<div id="status" class="notice">准备就绪。请先加载模型。</div>
-<video id="video" controls muted playsinline preload="metadata"></video>
-<div class="stats"><div class="stat"><b id="count">—</b><small>候选次数</small></div><div class="stat"><b id="frequency">—</b><small>频率 / Hz</small></div><div class="stat"><b id="coverage">—</b><small>手部检出率</small></div></div>
-<canvas id="plot" width="730" height="170"></canvas>
-<p id="note">计数结果未经临床验证，必须人工复核。</p>
-<label>人工复核次数（可选）</label><input id="manual" type="number" min="0" step="1">
-<button id="export">下载分析JSON</button>
+<h2>手指对合与震颤视频分析</h2>
+<div class="note">V0.5采用按时间点逐帧定位分析，避免旧版实时播放漏采帧。30 fps代表请求取样的频率，不代表系统已经验证了原视频真实帧率。处理时间可能明显长于视频时长。</div>
+<div class="row"><div><label for="subject">去标识化研究编号</label><input id="subject" placeholder="TEST001"></div>
+<div><label for="visit">访视编号</label><input id="visit" value="S1"></div>
+<div><label for="task">任务</label><select id="task"><option value="finger">拇指—食指快速对合</option><option value="rest">静止性震颤</option><option value="posture">姿势性震颤</option></select></div>
+<div><label for="hand">测试手</label><select id="hand"><option>右手</option><option>左手</option></select></div>
+<div><label for="samplefps">逐帧采样目标</label><select id="samplefps"><option value="30" selected>30次/视频秒（手机推荐）</option><option value="25">25次/视频秒</option><option value="60">60次/视频秒（视频确实为60fps时）</option></select></div>
+<div><label for="maxsecs">分析时长上限</label><select id="maxsecs"><option value="15">15秒</option><option value="20" selected>20秒</option><option value="30">30秒</option></select></div></div>
+<label for="file">选择本地手机视频（MP4/MOV等，需浏览器支持解码）</label><input id="file" type="file" accept="video/*">
+<div class="actions"><button class="btn alt" id="load">① 检查并加载手部模型</button><button class="btn" id="start">② 开始逐帧分析</button><button class="btn alt" id="cancel" disabled>中止分析</button></div>
+<div id="status" class="status">就绪。请先选择清晰的单手视频，并加载模型。</div>
+<progress id="progress" max="100" value="0"></progress>
+<div id="progressText" class="muted" style="font-size:12px">0%</div>
+<video id="video" controls playsinline muted preload="metadata"></video>
+<div class="stats">
+<div class="stat"><b id="count">—</b><small>标准候选对合次数</small></div>
+<div class="stat"><b id="fpsStat">—</b><small>取样点/视频秒</small></div>
+<div class="stat"><b id="frames">—</b><small>处理取样点</small></div>
+<div class="stat"><b id="coverage">—</b><small>手部检出率</small></div>
+</div>
+<div id="alternates" class="note">分析结束后显示保守／标准／灵敏阈值的计数，以及震颤候选频率。</div>
+<canvas width="760" height="200" id="plot"></canvas>
+<p id="note" class="muted">图表显示拇指与食指的归一化距离，橙点为候选对合事件。需人工复核。</p>
+<div class="row"><div><label for="manual">人工计数（可选）</label><input id="manual" type="number" min="0" step="1"></div>
+<div><label for="review">人工复核</label><select id="review"><option>未复核</option><option>计数基本准确</option><option>需修正</option><option>视频不合格</option></select></div></div>
+<div class="actions"><button class="btn alt" id="saveReview">保存人工复核</button><button class="btn alt" id="exportCSV">下载指标CSV</button><button class="btn alt" id="exportRaw">下载逐帧数据CSV</button><button class="btn" id="exportJSON">下载完整JSON</button></div>
 </section>
-<section><h2>平板触屏敲击</h2><p>平板测试与数据导出使用独立页面。</p><a class="link" href="tapping.html">打开平板敲击程序</a></section>
-</main><script type="module" src="video.js"></script></body></html>
+<section><h2>平板触屏敲击</h2><p class="muted">平板专用页面保留屏幕校准、左右手重复测试和原始事件导出。</p><a href="./tapping.html">打开平板敲击网页</a></section>
+<div class="footer">PD–ET Digital Lab V0.5 · 技术预实验 · 不能用于临床诊断</div>
+</main><script type="module" src="./video.js"></script></body></html>
