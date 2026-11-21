@@ -48,33 +48,67 @@ $("file").onchange=()=>{
  fileURL=URL.createObjectURL(file);v.src=fileURL;v.load();
  status("已选择："+file.name+"。建议先人工数出实际对合次数，用于验证。");
 };
+
 async function metadata(video){
- if(video.readyState>=1&&Number.isFinite(video.duration)&&video.duration>0)return;
+ if(video.readyState>=1&&Number.isFinite(video.duration)&&video.duration>0&&video.videoWidth>0&&video.videoHeight>0)return;
  await new Promise((resolve,reject)=>{
-  const timer=setTimeout(()=>{clear();reject(Error("视频元数据读取超时"))},12000);
-  const ok=()=>{clear();resolve()};
-  const fail=()=>{clear();reject(Error("视频格式无法解码"))};
-  function clear(){clearTimeout(timer);video.removeEventListener("loadedmetadata",ok);video.removeEventListener("error",fail)}
-  video.addEventListener("loadedmetadata",ok);video.addEventListener("error",fail);
- });
-}
-function seek(video,time,run){
- return new Promise((resolve,reject)=>{
-  if(run.cancelled){reject(Error("用户已中止"));return}
-  if(Math.abs(video.currentTime-time)<.002&&video.readyState>=2){resolve();return}
-  let done=false;
-  const timer=setTimeout(()=>end(Error("定位视频帧超时；请尝试转换为H.264 MP4")),10000);
-  function end(err){
-   if(done)return;done=true;clearTimeout(timer);
-   video.removeEventListener("seeked",onDone);video.removeEventListener("error",onError);
+  let finished=false;
+  const timer=setTimeout(()=>done(Error("12秒内未能获得视频分辨率，请确认MP4采用H.264编码")),12000);
+  function done(err){
+   if(finished)return;finished=true;clearTimeout(timer);
+   video.removeEventListener("loadedmetadata",ok);video.removeEventListener("error",bad);
    if(err)reject(err);else resolve();
   }
-  function onDone(){end()}
-  function onError(){end(Error("视频解码失败"))}
-  video.addEventListener("seeked",onDone);video.addEventListener("error",onError);
-  try{video.currentTime=time}catch(e){end(e)}
+  function ok(){done()}
+  function bad(){done(Error("浏览器无法读取该视频的元数据"))}
+  video.addEventListener("loadedmetadata",ok);video.addEventListener("error",bad);
  });
+ if(!Number.isFinite(video.duration)||video.duration<=0||video.videoWidth<2||video.videoHeight<2){
+  throw Error("视频没有有效的时长或图像尺寸，请重新导出为H.264 MP4");
+ }
 }
+async function primeVideo(video){
+ if(video.videoWidth<2||video.videoHeight<2)throw Error("视频尺寸无效（"+video.videoWidth+"×"+video.videoHeight+"）");
+ if(video.readyState>=2)return;
+ try{await video.play()}catch(e){
+  throw Error("首帧解码失败；无法播放视频："+(e.message||e));
+ }
+ const begin=performance.now();
+ while(video.readyState<2&&performance.now()-begin<8000){
+  await new Promise(resolve=>setTimeout(resolve,50));
+ }
+ video.pause();
+ if(video.readyState<2)throw Error("8秒内无法解码首帧，请将手机视频转成兼容的H.264 MP4后重试");
+}
+async function seek(video,time,run){
+ if(run.cancelled)throw Error("用户中止分析");
+ const target=Math.max(0,Math.min(time,video.duration-.005));
+ if(!(target>=0))throw Error("无效的视频时间戳");
+ if(Math.abs(video.currentTime-target)>=.001||video.readyState<2){
+  await new Promise((resolve,reject)=>{
+   let finished=false;
+   const timer=setTimeout(()=>done(Error("定位第"+target.toFixed(3)+"秒画面超时，建议检查视频编码")),12000);
+   function done(err){
+    if(finished)return;finished=true;clearTimeout(timer);
+    video.removeEventListener("seeked",ok);video.removeEventListener("error",bad);
+    if(err)reject(err);else resolve();
+   }
+   function ok(){done()}
+   function bad(){done(Error("视频定位时发生解码错误"))}
+   video.addEventListener("seeked",ok);video.addEventListener("error",bad);
+   try{video.currentTime=target}catch(e){done(e)}
+  });
+ }
+ const start=performance.now();
+ while(video.readyState<2&&performance.now()-start<4000){
+  if(run.cancelled)throw Error("用户中止分析");
+  await new Promise(resolve=>setTimeout(resolve,35));
+ }
+ if(video.readyState<2)throw Error("第"+target.toFixed(3)+"秒画面没有解码完成");
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ if(video.videoWidth<2||video.videoHeight<2)throw Error("定位后画面宽高为0");
+}
+
 function smoothSeries(rows){
  return rows.map((p,i)=>{
   const vals=[];
@@ -224,13 +258,36 @@ $("start").onclick=async()=>{
  progress(0,total);$("count").textContent="—";$("frames").textContent="—";$("coverage").textContent="—";$("fpsStat").textContent="—";
  status("正在逐帧定位视频，共计划处理 "+total+" 个取样点。此过程可能比视频播放慢得多。");
  try{
+  await primeVideo(v);
+  const frameCanvas=document.createElement("canvas");
+  const maxSide=960;
+  const scale=Math.min(1,maxSide/Math.max(v.videoWidth,v.videoHeight));
+  frameCanvas.width=Math.max(2,Math.round(v.videoWidth*scale));
+  frameCanvas.height=Math.max(2,Math.round(v.videoHeight*scale));
+  const frameCtx=frameCanvas.getContext("2d",{willReadFrequently:true});
+  if(!frameCtx)throw Error("无法创建视频分析Canvas");
+  await detector.setOptions({runningMode:"IMAGE"});
+  status("已确认视频尺寸："+v.videoWidth+"×"+v.videoHeight+"；开始逐帧分析");
   for(let i=0;i<total;i++){
    if(run.cancelled)throw Error("已由用户中止");
    const t=Math.min(duration-.005,(i+.5)/fps);
    await seek(v,t,run);
    if(run.cancelled)throw Error("已由用户中止");
    const stamp=Math.max(run.lastStamp+1,Math.round(t*1000));
-   const landmarks=detector.detectForVideo(v,stamp).landmarks?.[0];
+   if(v.videoWidth<2||v.videoHeight<2||v.readyState<2){
+    throw Error("第"+(i+1)+"个采样点没有有效的解码画面；宽高："+v.videoWidth+"×"+v.videoHeight+"；readyState："+v.readyState);
+   }
+   try{
+    frameCtx.drawImage(v,0,0,frameCanvas.width,frameCanvas.height);
+   }catch(e){
+    throw Error("第"+(i+1)+"个采样点无法转换为Canvas图像："+(e.message||e));
+   }
+   let landmarks;
+   try{
+    landmarks=detector.detect(frameCanvas).landmarks?.[0];
+   }catch(e){
+    throw Error("第"+(i+1)+"个采样点的MediaPipe识别失败："+(e.message||e));
+   }
    run.lastStamp=stamp;run.attempts++;
    if(landmarks){
     run.detected++;
@@ -254,7 +311,7 @@ $("start").onclick=async()=>{
   if(gaps.some(x=>x>.18))flags.push("关键点存在连续缺失");
   if(task==="finger"&&metrics.threshold_disagreement>Math.max(3,Math.round((metrics.candidate_count_standard||0)*.2)))flags.push("不同计数阈值差异较大，请人工核对");
   if(fps!==30&&task!=="finger")flags.push("震颤原型按30次/秒的重采样设计，其他输入帧率需额外验证");
-  const record={version:"0.5.0",type:"video",record_id:"V"+Date.now(),created_at:new Date().toISOString(),subject_id:$("subject").value.trim(),visit_id:$("visit").value.trim(),side:$("hand").value,task,file_name:file.name,requested_sampling_fps:fps,planned_samples:total,processed_samples:run.attempts,detected_samples:run.detected,detected_fraction:coverage,record_duration_s:duration,source_fps_verified:false,quality_flags:flags,metrics,raw_frames:run.rows,manual_count:null,review:"未复核"};
+  const record={version:"0.5.1",type:"video",record_id:"V"+Date.now(),created_at:new Date().toISOString(),subject_id:$("subject").value.trim(),visit_id:$("visit").value.trim(),side:$("hand").value,task,file_name:file.name,requested_sampling_fps:fps,planned_samples:total,processed_samples:run.attempts,detected_samples:run.detected,detected_fraction:coverage,record_duration_s:duration,source_fps_verified:false,quality_flags:flags,metrics,raw_frames:run.rows,manual_count:null,review:"未复核"};
   records.push(record);last=record;
   $("count").textContent=metrics.valid&&task==="finger"?metrics.count:"—";
   $("fpsStat").textContent=fmt(run.attempts/duration,1);
@@ -286,5 +343,5 @@ $("exportRaw").onclick=()=>{
  const rows=records.flatMap(r=>r.raw_frames.map(p=>({record_id:r.record_id,task:r.task,side:r.side,...p})));
  download(makeCSV(rows,["record_id","task","side","requested_time_s","actual_video_time_s","t","d","x","y"]),filename()+"_frames.csv","text/csv;charset=utf-8");
 };
-$("exportJSON").onclick=()=>download(JSON.stringify({version:"0.5.0",exported_at:new Date().toISOString(),records},null,2),filename()+"_full.json","application/json;charset=utf-8");
+$("exportJSON").onclick=()=>download(JSON.stringify({version:"0.5.1",exported_at:new Date().toISOString(),records},null,2),filename()+"_full.json","application/json;charset=utf-8");
 window.addEventListener("beforeunload",e=>{if(records.length){e.preventDefault();e.returnValue=""}});

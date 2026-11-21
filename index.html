@@ -1,9 +1,9 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="./style.css"><title>PD–ET Digital Lab V0.5</title></head><body>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="./style.css"><title>PD–ET Digital Lab V0.5.1</title></head><body>
 <main>
-<header class="hero"><h1>PD–ET Digital Lab V0.5</h1><p>手机30 fps视频逐帧运动学分析 · 研究原型</p></header>
+<header class="hero"><h1>PD–ET Digital Lab V0.5.1</h1><p>手机30 fps视频逐帧运动学分析 · 研究原型</p></header>
 <section>
 <h2>手指对合与震颤视频分析</h2>
-<div class="note">V0.5采用按时间点逐帧定位分析，避免旧版实时播放漏采帧。30 fps代表请求取样的频率，不代表系统已经验证了原视频真实帧率。处理时间可能明显长于视频时长。</div>
+<div class="note">V0.5.1采用按时间点逐帧定位分析，避免旧版实时播放漏采帧。30 fps代表请求取样的频率，不代表系统已经验证了原视频真实帧率。处理时间可能明显长于视频时长。</div>
 <div class="row"><div><label for="subject">去标识化研究编号</label><input id="subject" placeholder="TEST001"></div>
 <div><label for="visit">访视编号</label><input id="visit" value="S1"></div>
 <div><label for="task">任务</label><select id="task"><option value="finger">拇指—食指快速对合</option><option value="rest">静止性震颤</option><option value="posture">姿势性震颤</option></select></div>
@@ -30,5 +30,5 @@
 <div class="actions"><button class="btn alt" id="saveReview">保存人工复核</button><button class="btn alt" id="exportCSV">下载指标CSV</button><button class="btn alt" id="exportRaw">下载逐帧数据CSV</button><button class="btn" id="exportJSON">下载完整JSON</button></div>
 </section>
 <section><h2>平板触屏敲击</h2><p class="muted">平板专用页面保留屏幕校准、左右手重复测试和原始事件导出。</p><a href="./tapping.html">打开平板敲击网页</a></section>
-<div class="footer">PD–ET Digital Lab V0.5 · 技术预实验 · 不能用于临床诊断</div>
+<div class="footer">PD–ET Digital Lab V0.5.1 · 技术预实验 · 不能用于临床诊断</div>
 </main><script type="module" src="./video.js"></script></body></html>
