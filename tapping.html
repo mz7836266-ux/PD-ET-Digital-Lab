@@ -1,0 +1,23 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PD–ET Digital Lab</title><link rel="stylesheet" href="style.css"></head><body>
+<main>
+<header><h1>PD–ET Tablet Tapping</h1><p>V0.4.1 · 平板标准化触屏测试</p></header>
+<section>
+<h2>受试者与屏幕校准</h2>
+<label>研究编号</label><input id="subject" value="TEST001">
+<label>设备型号</label><input id="device" placeholder="平板型号">
+<label>测试手别</label><select id="hand"><option>右手</option><option>左手</option></select>
+<p>请用实物尺调整以下校准线，使两端实际距离等于100 mm。</p>
+<div id="cal" class="cal"></div><input id="slider" type="range" min="200" max="650" value="390">
+<button id="confirm">确认校准</button>
+<div id="status" class="notice">等待屏幕校准。</div>
+</section>
+<section>
+<h2>交替点击 A / B</h2>
+<p>平板应平放，建议横屏。正式测试中目标不会动态高亮。研究候选设置：目标直径30 mm，间距90 mm，每次20秒。</p>
+<div id="clock" class="clock">00:20</div>
+<div id="stage" class="stage"><button data-target="A" class="target">A</button><button data-target="B" class="target b">B</button></div>
+<div class="stats"><div class="stat"><b id="count">0</b><small>目标内触碰</small></div><div class="stat"><b id="correct">0</b><small>顺序正确</small></div><div class="stat"><b id="rate">0.00</b><small>触碰/秒</small></div></div>
+<button id="practice">5秒练习</button><button id="start" disabled>开始20秒测试</button>
+</section>
+<section><h2>数据导出</h2><button id="csv">下载原始CSV</button><button id="json">下载完整JSON</button><a class="link" href="index.html">返回视频分析</a></section>
+</main><script type="module" src="tapping.js"></script></body></html>

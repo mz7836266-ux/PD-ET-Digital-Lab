@@ -1,0 +1,21 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PD–ET Digital Lab</title><link rel="stylesheet" href="style.css"></head><body>
+<main>
+<header><h1>PD–ET Digital Lab</h1><p>V0.4.1 · 手指对合与震颤视频分析 · 研究用途</p></header>
+<section>
+<h2>视频运动学分析</h2>
+<p>浏览器本地分析上传的视频；程序不自动上传原始文件。首次打开会从本网站加载MediaPipe模型。</p>
+<label>研究编号</label><input id="subject" value="TEST001" maxlength="40">
+<label>任务</label><select id="task"><option value="finger">拇指—食指对合</option><option value="rest">静止性震颤</option><option value="posture">姿势性震颤</option></select>
+<label>手别</label><select id="side"><option>右手</option><option>左手</option></select>
+<label>视频文件</label><input id="file" type="file" accept="video/*">
+<button id="load">① 加载手部模型</button><button id="analyze">② 开始自动分析</button>
+<div id="status" class="notice">准备就绪。请先加载模型。</div>
+<video id="video" controls muted playsinline preload="metadata"></video>
+<div class="stats"><div class="stat"><b id="count">—</b><small>候选次数</small></div><div class="stat"><b id="frequency">—</b><small>频率 / Hz</small></div><div class="stat"><b id="coverage">—</b><small>手部检出率</small></div></div>
+<canvas id="plot" width="730" height="170"></canvas>
+<p id="note">计数结果未经临床验证，必须人工复核。</p>
+<label>人工复核次数（可选）</label><input id="manual" type="number" min="0" step="1">
+<button id="export">下载分析JSON</button>
+</section>
+<section><h2>平板触屏敲击</h2><p>平板测试与数据导出使用独立页面。</p><a class="link" href="tapping.html">打开平板敲击程序</a></section>
+</main><script type="module" src="video.js"></script></body></html>

@@ -1,0 +1,12 @@
+{
+  "name": "pd-et-digital-lab",
+  "version": "0.4.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.21"
+  }
+}
