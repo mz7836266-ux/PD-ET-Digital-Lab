@@ -1,0 +1,1469 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PD Motor Tasks Lab</title>
+<style>
+:root{
+  color-scheme:dark;
+  font-family:system-ui,"Microsoft YaHei",sans-serif;
+  background:#101722;color:#e8edf5
+}
+*{box-sizing:border-box}
+body{margin:0;padding:20px}
+main{max-width:1050px;margin:auto}
+h1{font-size:clamp(24px,4vw,34px);margin:12px 0}
+h2{font-size:19px;margin:0 0 14px}
+p{color:#a9b8c9;line-height:1.7}
+.panel{
+  background:#1a2534;border:1px solid #314257;
+  border-radius:15px;padding:20px;margin:16px 0
+}
+button,input,select{
+  font:inherit;padding:11px;border-radius:8px
+}
+input,select{
+  background:#101722;color:#e8edf5;
+  border:1px solid #536477;width:100%
+}
+button{
+  border:0;background:#19b79c;color:#072923;
+  font-weight:700;cursor:pointer;margin:5px 5px 5px 0
+}
+button.secondary{background:#34465a;color:#e8edf5}
+button:disabled{opacity:.35;cursor:not-allowed}
+label{display:block;font-size:13px;margin:0 0 7px;color:#afc0d1}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.metric{background:#111d2b;padding:14px;border-radius:10px}
+.metric strong{display:block;font-size:23px;margin:7px 0}
+.metric small{color:#9fb0c3}
+.note{
+  background:#263a45;border-left:3px solid #19b79c;
+  padding:12px;border-radius:6px;font-size:13px
+}
+nav{display:flex;flex-wrap:wrap;gap:8px}
+nav a{
+  color:#8eddd1;text-decoration:none;padding:9px;
+  border:1px solid #34465a;border-radius:8px;font-size:13px
+}
+nav a.active{background:#17483f}
+#pad{
+  width:min(100%,520px);aspect-ratio:1;
+  height:auto;display:block;margin:14px auto;
+  background:#fff;border-radius:9px;
+  touch-action:none;user-select:none
+}
+video{width:100%;max-height:360px;background:#080e15;border-radius:10px}
+.chart{width:100%;height:auto;background:#111d2b;border-radius:8px}
+.tablewrap{overflow:auto;max-height:400px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{padding:9px;border-bottom:1px solid #34465a;text-align:left;white-space:nowrap}
+th{background:#29384a;position:sticky;top:0}
+.error{color:#ff9b9b}
+.ok{color:#69d8bc}
+.small{font-size:12px}
+[hidden]{display:none!important}
+@media(max-width:650px){
+  body{padding:10px}
+  .panel{padding:13px}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .metric strong{font-size:20px}
+}
+</style>
+</head>
+
+<body>
+<main>
+<nav>
+  <a href="./index.html">手指对合原版</a>
+  <a href="./v07.html">V0.7对合</a>
+  <a href="./spiral-wave.html" id="navTrace">螺旋／波浪线</a>
+  <a href="./hand-open.html" id="navOpen">握拳—张手</a>
+  <a href="./forearm-rotate.html" id="navRotate">旋前—旋后</a>
+</nav>
+
+<h1 id="title">PD Motor Tasks Lab</h1>
+<p id="subtitle"></p>
+<p class="note">
+  科研测量原型，不用于临床诊断。
+  视频及触屏数据在当前浏览器内处理。
+  正式研究须经伦理批准并完成测量学验证。
+</p>
+
+<section class="panel">
+  <h2>1. 受试者信息</h2>
+  <div class="grid">
+    <div>
+      <label>受试者编号</label>
+      <input id="subject" value="TEST001" maxlength="60">
+    </div>
+    <div>
+      <label>访视编号</label>
+      <input id="visit" value="S1" maxlength="30">
+    </div>
+    <div>
+      <label>测试手别</label>
+      <select id="side">
+        <option>右手</option>
+        <option>左手</option>
+      </select>
+    </div>
+    <div>
+      <label>利手</label>
+      <select id="dominant">
+        <option>未记录</option>
+        <option>右手</option>
+        <option>左手</option>
+      </select>
+    </div>
+    <div>
+      <label>药物状态</label>
+      <select id="med">
+        <option>未记录</option>
+        <option>ON期</option>
+        <option>OFF期</option>
+        <option>未服抗帕金森药物</option>
+      </select>
+    </div>
+    <div>
+      <label>重复试次</label>
+      <input id="trialNo" type="number" value="1" min="1" max="99">
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="tracePanel" hidden>
+  <h2>2. 触屏轨迹测试</h2>
+  <label>绘制任务</label>
+  <select id="traceTask">
+    <option value="spiral">螺旋线</option>
+    <option value="wave">波浪线</option>
+  </select>
+  <p>
+    请使用指定手的食指，从绿色起点开始，
+    沿灰色轨迹连续绘制至红色终点。
+    尽量快速、准确，不要主动抬起手指。
+  </p>
+  <button id="traceStart">开始新试次</button>
+  <button id="traceFinish" disabled>完成并分析</button>
+  <canvas id="pad" width="800" height="800"></canvas>
+  <p id="traceStatus">请先点击开始新试次。</p>
+  <p class="small">
+    测试时请保持手机方向不变。
+    不同屏幕的物理尺寸与触控采样率可能不同。
+  </p>
+</section>
+
+<section class="panel" id="videoPanel" hidden>
+  <h2>2. 视频运动分析</h2>
+  <p id="videoInstructions"></p>
+  <div class="grid">
+    <div>
+      <label>上传视频</label>
+      <input type="file" id="videoFile"
+        accept="video/mp4,video/quicktime,video/webm">
+    </div>
+    <div>
+      <label>请求采样率</label>
+      <select id="fps">
+        <option value="30">30次/秒</option>
+        <option value="60">60次/秒（探索性）</option>
+      </select>
+    </div>
+  </div>
+  <div style="margin-top:14px">
+    <video id="video" controls playsinline preload="metadata"></video>
+  </div>
+  <button id="runVideo">加载模型并分析</button>
+  <button id="cancelVideo" class="secondary" disabled>取消</button>
+  <progress id="progress" max="100" value="0"
+    style="width:100%;margin-top:10px"></progress>
+  <p id="videoStatus">请选择测试视频。</p>
+  <p class="small">
+    建议每段视频不超过30秒，使用固定摄像机。
+    请求采样率并不等于实际视频帧率。
+    60次/秒模式不会凭空增加视频原始信息。
+  </p>
+</section>
+
+<section class="panel" id="results" hidden>
+  <h2>3. 分析结果</h2>
+  <p id="quality"></p>
+  <div class="grid" id="cards"></div>
+  <p class="note" id="resultNote"></p>
+</section>
+
+<section class="panel" id="charts" hidden>
+  <h2>4. 运动曲线</h2>
+  <p id="chartLabel1"></p>
+  <canvas id="chart1" class="chart" width="900" height="260"></canvas>
+  <div id="chart2Panel">
+    <p id="chartLabel2"></p>
+    <canvas id="chart2" class="chart" width="900" height="260"></canvas>
+  </div>
+  <div id="chart3Panel">
+    <p id="chartLabel3"></p>
+    <canvas id="chart3" class="chart" width="900" height="260"></canvas>
+  </div>
+</section>
+
+<section class="panel" id="cyclePanel" hidden>
+  <h2>5. 完整运动周期</h2>
+  <p class="small">点击某一行可定位到视频对应时刻。</p>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>周期</th><th>起始(s)</th><th>时长(ms)</th>
+          <th>幅度</th><th>平均速度</th>
+          <th>第一阶段速度</th><th>第二阶段速度</th>
+          <th>标记</th>
+        </tr>
+      </thead>
+      <tbody id="cycleRows"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="exports" hidden>
+  <h2>6. 导出科研数据</h2>
+  <button id="exportJSON">完整JSON</button>
+  <button id="exportSummary">汇总CSV</button>
+  <button id="exportRaw">原始数据CSV</button>
+  <button id="exportCycles">周期CSV</button>
+  <p class="small">
+    完整JSON包含原始数据、质量标记及分析参数。
+    新试次会替换当前页面中的结果，请及时导出。
+  </p>
+</section>
+</main>
+
+<script type="module">
+"use strict";
+
+// ======================================================
+// 1. 通用界面与数据工具
+// ======================================================
+
+const $=id=>document.getElementById(id);
+const path=location.pathname.split("/").pop();
+
+const mode=path==="hand-open.html"?"open":
+  path==="forearm-rotate.html"?"rotate":"trace";
+
+const VERSION="0.8.0-exploratory";
+const finite=x=>typeof x==="number"&&Number.isFinite(x);
+const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+
+function median(a){
+  const b=[...a].sort((x,y)=>x-y),k=Math.floor(b.length/2);
+  return b.length?(b.length%2?b[k]:(b[k-1]+b[k])/2):null;
+}
+function quantile(a,p){
+  if(!a.length)return null;
+  const b=[...a].sort((x,y)=>x-y);
+  const x=(b.length-1)*p,i=Math.floor(x);
+  return b[i]+(b[Math.min(i+1,b.length-1)]-b[i])*(x-i);
+}
+function cv(a){
+  if(a.length<2)return null;
+  const m=mean(a);
+  if(!finite(m)||Math.abs(m)<1e-9)return null;
+  return Math.sqrt(mean(a.map(x=>(x-m)**2)))/Math.abs(m)*100;
+}
+function decrement(a){
+  if(a.length<6)return null;
+  const h=Math.floor(a.length/2);
+  const f=mean(a.slice(0,h)),l=mean(a.slice(-h));
+  return f>1e-9?(f-l)/f*100:null;
+}
+function slope(a){
+  if(a.length<6)return null;
+  const mx=(a.length-1)/2,my=mean(a);
+  let n=0,d=0;
+  a.forEach((v,i)=>{
+    n+=(i-mx)*(v-my);
+    d+=(i-mx)**2;
+  });
+  return d?n/d:null;
+}
+const fmt=(v,n=3)=>finite(v)?v.toFixed(n):"—";
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+
+function metadata(){
+  return {
+    version:VERSION,
+    created_at:new Date().toISOString(),
+    subject_id:$("subject").value.trim()||"TEST",
+    visit_id:$("visit").value.trim()||"S1",
+    side:$("side").value,
+    dominant_hand:$("dominant").value,
+    medication_state:$("med").value,
+    trial_no:Number($("trialNo").value)||1,
+    task_mode:mode,
+    device_pixel_ratio:window.devicePixelRatio,
+    viewport_width_css:innerWidth,
+    viewport_height_css:innerHeight,
+    browser:navigator.userAgent
+  };
+}
+
+let result=null;
+function resetResult(){
+  result=null;
+  ["results","charts","cyclePanel","exports"]
+    .forEach(id=>$(id).hidden=true);
+}
+
+function download(content,name,type){
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+function csvCell(v){
+  if(v==null)return "";
+  let s=typeof v==="object"?JSON.stringify(v):String(v);
+  if(typeof v==="string"&&/^[=+\-@\t\r]/.test(s)){
+    s="'"+s;
+  }
+  return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+function csv(rows){
+  if(!rows.length)return "";
+  const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))];
+  return "\uFEFF"+[
+    keys.join(","),
+    ...rows.map(r=>keys.map(k=>csvCell(r[k])).join(","))
+  ].join("\r\n");
+}
+function filename(){
+  return [
+    result.meta.subject_id,
+    result.meta.visit_id,
+    result.task,
+    result.meta.side,
+    result.meta.trial_no
+  ].join("_").replace(/[\\/:*?"<>|]/g,"_");
+}
+
+function status(id,text,error=false){
+  $(id).textContent=text;
+  $(id).className=error?"error":"";
+}
+
+const descriptions={
+  trace:["螺旋线／波浪线触屏测试","连续轨迹控制与精细运动分析"],
+  open:["握拳—张手运动测试","手部伸展指数与重复运动学分析"],
+  rotate:["前臂旋前—旋后测试","手掌朝向代理信号与翻转运动学分析"]
+};
+$("title").textContent=descriptions[mode][0];
+$("subtitle").textContent=descriptions[mode][1]+" · "+VERSION;
+document.title=descriptions[mode][0];
+$("nav"+({trace:"Trace",open:"Open",rotate:"Rotate"}[mode]))
+  .classList.add("active");
+$("tracePanel").hidden=mode!=="trace";
+$("videoPanel").hidden=mode==="trace";
+
+$("videoInstructions").textContent=mode==="open"
+  ?"请拍摄指定手的完整手腕与五指。先握拳，再尽可能充分张开并握拳，连续重复约10次。保持相机稳定。"
+  :"请将前臂保持相对稳定，使手掌和手背交替朝向摄像头，充分、快速地往返翻转约10次。手指尽量伸直，避免整个上臂或身体代偿。";
+
+// ======================================================
+// 2. 触屏轨迹生成及采集
+// ======================================================
+
+function targetFor(task){
+  return Array.from({length:601},(_,i)=>{
+    const u=i/600;
+    if(task==="spiral"){
+      const a=6*Math.PI*u,r=.045+.385*u;
+      return {x:.5+r*Math.cos(a),y:.5+r*Math.sin(a)};
+    }
+    return {
+      x:.07+.86*u,
+      y:.5+.20*Math.sin(6*Math.PI*u)
+    };
+  });
+}
+
+const pad=$("pad");
+const pen=pad.getContext("2d");
+let target=targetFor("spiral");
+let points=[],stroke=0,activePointer=null;
+let armed=false,traceOrigin=null,traceMeta=null;
+let traceFlags=[];
+
+function drawPad(){
+  const w=pad.width,h=pad.height;
+  pen.clearRect(0,0,w,h);
+  pen.fillStyle="#fff";
+  pen.fillRect(0,0,w,h);
+
+  pen.lineWidth=8;
+  pen.lineCap="round";
+  pen.lineJoin="round";
+  pen.strokeStyle="#bbc3cb";
+  pen.beginPath();
+  target.forEach((p,i)=>{
+    if(i===0)pen.moveTo(p.x*w,p.y*h);
+    else pen.lineTo(p.x*w,p.y*h);
+  });
+  pen.stroke();
+
+  pen.strokeStyle="#1271bf";
+  pen.lineWidth=4;
+  pen.beginPath();
+  points.forEach((p,i)=>{
+    if(i===0||p.stroke!==points[i-1].stroke)
+      pen.moveTo(p.x*w,p.y*h);
+    else pen.lineTo(p.x*w,p.y*h);
+  });
+  pen.stroke();
+
+  [[target[0],"#16a34a"],
+   [target[target.length-1],"#dc2626"]]
+    .forEach(([p,c])=>{
+      pen.fillStyle=c;
+      pen.beginPath();
+      pen.arc(p.x*w,p.y*h,11,0,2*Math.PI);
+      pen.fill();
+    });
+}
+
+function addPoint(e,kind){
+  const r=pad.getBoundingClientRect();
+  if(traceOrigin===null)traceOrigin=e.timeStamp;
+
+  const t=(e.timeStamp-traceOrigin)/1000;
+  if(points.length&&t<points[points.length-1].t)return;
+
+  if(Math.abs(r.width-traceMeta.pad_css_width)>2||
+     Math.abs(r.height-traceMeta.pad_css_height)>2){
+    if(!traceFlags.includes("测试期间绘图区尺寸改变"))
+      traceFlags.push("测试期间绘图区尺寸改变");
+  }
+
+  points.push({
+    t,
+    x:(e.clientX-r.left)/r.width,
+    y:(e.clientY-r.top)/r.height,
+    stroke,
+    kind,
+    pointer_type:e.pointerType,
+    pressure:finite(e.pressure)?e.pressure:null
+  });
+}
+
+$("traceTask").addEventListener("change",()=>{
+  target=targetFor($("traceTask").value);
+  points=[];
+  drawPad();
+  resetResult();
+});
+
+$("traceStart").addEventListener("click",()=>{
+  if(activePointer!==null)return;
+  resetResult();
+
+  points=[];
+  stroke=0;
+  traceOrigin=null;
+  traceFlags=[];
+  armed=true;
+  traceMeta=metadata();
+
+  const r=pad.getBoundingClientRect();
+  traceMeta.pad_css_width=r.width;
+  traceMeta.pad_css_height=r.height;
+  traceMeta.trace_pattern=$("traceTask").value;
+
+  $("traceTask").disabled=true;
+  $("traceStart").disabled=true;
+  $("traceFinish").disabled=false;
+  drawPad();
+
+  status("traceStatus","已准备，从绿色起点开始绘制。");
+});
+
+pad.addEventListener("pointerdown",e=>{
+  if(!armed||activePointer!==null)return;
+  e.preventDefault();
+  activePointer=e.pointerId;
+  stroke++;
+  pad.setPointerCapture(e.pointerId);
+  addPoint(e,"down");
+  drawPad();
+});
+
+pad.addEventListener("pointermove",e=>{
+  if(!armed||e.pointerId!==activePointer)return;
+  e.preventDefault();
+
+  const batch=e.getCoalescedEvents?.()||[];
+  (batch.length?batch:[e]).forEach(p=>addPoint(p,"move"));
+  drawPad();
+});
+
+function endPointer(e,cancelled){
+  if(e.pointerId!==activePointer)return;
+  addPoint(e,cancelled?"cancel":"up");
+  if(cancelled)traceFlags.push("触控事件被系统取消");
+  activePointer=null;
+  drawPad();
+  status("traceStatus","可继续绘制，或点击完成并分析。");
+}
+
+pad.addEventListener("pointerup",e=>endPointer(e,false));
+pad.addEventListener("pointercancel",e=>endPointer(e,true));
+
+document.addEventListener("visibilitychange",()=>{
+  if(armed&&document.hidden)
+    traceFlags.push("测试期间页面切换至后台");
+});
+
+// ======================================================
+// 3. 轨迹距离及速度计算
+// ======================================================
+
+function pathGeometry(path){
+  let total=0;
+  const segs=[];
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1],b=path[i];
+    const dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy);
+    if(l>0){
+      segs.push({a,dx,dy,l,s:total});
+      total+=l;
+    }
+  }
+  return {segs,total};
+}
+
+function nearest(p,g){
+  let best=Infinity,progress=0;
+  for(const s of g.segs){
+    const u=clamp(
+      ((p.x-s.a.x)*s.dx+(p.y-s.a.y)*s.dy)/(s.l*s.l),
+      0,1
+    );
+    const d=(p.x-s.a.x-u*s.dx)**2+
+            (p.y-s.a.y-u*s.dy)**2;
+    if(d<best){
+      best=d;
+      progress=(s.s+u*s.l)/g.total;
+    }
+  }
+  return {error:Math.sqrt(best),progress};
+}
+
+function analyzeTrace(){
+  const g=pathGeometry(target);
+  const bins=new Set();
+  const timeBins=new Map();
+
+  let length=0,weightedError=0,weightedSquare=0;
+  let contactTime=0,longGaps=0,pauseCandidates=0;
+
+  // 在每段触屏轨迹内按空间距离进行重采样。
+  // 避免采样点较密集的慢速区间主导误差指标。
+  for(let i=1;i<points.length;i++){
+    const a=points[i-1],b=points[i];
+    if(a.stroke!==b.stroke)continue;
+
+    const l=Math.hypot(b.x-a.x,b.y-a.y);
+    const dt=b.t-a.t;
+    if(dt<0)continue;
+
+    length+=l;
+    contactTime+=dt;
+
+    if(dt>=.4&&l<=.01)pauseCandidates++;
+    if(dt>.5)longGaps++;
+
+    if(l>0){
+      const n=clamp(Math.ceil(l/.01),1,200);
+      const weight=l/n;
+
+      for(let j=0;j<n;j++){
+        const u=(j+.5)/n;
+        const p={
+          x:a.x+(b.x-a.x)*u,
+          y:a.y+(b.y-a.y)*u
+        };
+        const near=nearest(p,g);
+
+        weightedError+=near.error*weight;
+        weightedSquare+=near.error**2*weight;
+
+        if(near.error<=.03){
+          bins.add(Math.min(49,Math.floor(near.progress*50)));
+        }
+      }
+    }
+
+    // 将相邻触点间位移分配到200ms时间窗。
+    // 长时间无事件区间不进入速度CV计算。
+    if(dt>0&&dt<=.5){
+      let t=a.t;
+      while(t<b.t-1e-8){
+        const index=Math.floor((t+1e-8)/.2);
+        const end=Math.min(b.t,(index+1)*.2);
+        const delta=end-t;
+        if(delta<=0)break;
+
+        const key=a.stroke+"-"+index;
+        const item=timeBins.get(key)||{
+          t:index*.2,stroke:a.stroke,time:0,length:0
+        };
+        item.time+=delta;
+        item.length+=l*delta/dt;
+        timeBins.set(key,item);
+        t=end;
+      }
+    }
+  }
+
+  const speedSeries=[...timeBins.values()]
+    .filter(b=>b.time>=.15)
+    .map(b=>({
+      t:b.t,
+      stroke:b.stroke,
+      speed:b.length/b.time
+    }))
+    .sort((a,b)=>a.t-b.t);
+
+  const elapsed=points.length?
+    points[points.length-1].t-points[0].t:0;
+
+  const startError=points.length?
+    Math.hypot(points[0].x-target[0].x,
+               points[0].y-target[0].y):null;
+
+  const last=points[points.length-1];
+  const end=target[target.length-1];
+  const endError=last?Math.hypot(last.x-end.x,last.y-end.y):null;
+
+  const coverage=bins.size/50;
+  const completed=coverage>=.8&&startError<=.06&&endError<=.06;
+
+  const flags=[...traceFlags];
+
+  if(!completed)flags.push("目标路径可能未完整完成");
+  if(longGaps)flags.push("存在较长触控事件间隔");
+  if(points.length<10)flags.push("触点数据不足");
+  if(points.some(p=>p.pointer_type!=="touch"))
+    flags.push("含非手指触屏输入");
+
+  const valid=points.length>=10&&length>0&&elapsed>0&&
+    !traceFlags.length;
+
+  return {
+    meta:traceMeta,
+    task:traceMeta.trace_pattern,
+    valid,
+    quality_flags:[...new Set(flags)],
+    parameters:{
+      coverage_tolerance:.03,
+      coverage_bins:50,
+      completion_coverage:.8,
+      endpoint_tolerance:.06,
+      speed_bin_s:.2,
+      pause_candidate_s:.4
+    },
+    summary:{
+      elapsed_s:elapsed,
+      contact_time_s:contactTime,
+      path_length:length,
+      target_length:g.total,
+      mean_speed:elapsed>0?length/elapsed:null,
+      speed_cv_pct:cv(speedSeries.map(x=>x.speed)),
+      mean_path_error:length?weightedError/length:null,
+      rmse_path_error:length?Math.sqrt(weightedSquare/length):null,
+      target_coverage_pct:coverage*100,
+      lift_count:Math.max(0,stroke-1),
+      low_displacement_gap_candidates:pauseCandidates,
+      long_event_gap_count:longGaps,
+      start_error:startError,
+      end_error:endError,
+      completed,
+      point_count:points.length
+    },
+    points:[...points],
+    target:[...target],
+    speed_series:speedSeries
+  };
+}
+
+$("traceFinish").addEventListener("click",()=>{
+  if(activePointer!==null){
+    status("traceStatus","请先结束当前笔画。",true);
+    return;
+  }
+
+  armed=false;
+  $("traceTask").disabled=false;
+  $("traceStart").disabled=false;
+  $("traceFinish").disabled=true;
+
+  result=analyzeTrace();
+  showResult();
+
+  status("traceStatus","分析完成，请查看并导出结果。");
+});
+
+drawPad();
+
+// ======================================================
+// 4. MediaPipe视频加载和关键点提取
+// ======================================================
+
+const video=$("video");
+const offscreen=document.createElement("canvas");
+const vctx=offscreen.getContext("2d",{willReadFrequently:true});
+let mediaUrl=null,cancelled=false;
+
+async function initializeModel(){
+  status("videoStatus","正在加载本站MediaPipe识别库……");
+
+  const pkg=await import("./vendor/vision_bundle.mjs");
+
+  status("videoStatus","正在准备WASM运行环境……");
+  const vision=await pkg.FilesetResolver.forVisionTasks(
+    new URL("./vendor/wasm",location.href).href
+  );
+
+  status("videoStatus","正在初始化手部识别模型……");
+
+  return await pkg.HandLandmarker.createFromOptions(vision,{
+    baseOptions:{
+      modelAssetPath:new URL(
+        "./model/hand_landmarker.task",location.href
+      ).href,
+      delegate:"CPU"
+    },
+    runningMode:"VIDEO",
+    numHands:1,
+    minHandDetectionConfidence:.5,
+    minHandPresenceConfidence:.5,
+    minTrackingConfidence:.5
+  });
+}
+
+function waitEvent(el,event,action,timeout=15000){
+  return new Promise((resolve,reject)=>{
+    let timer;
+
+    function cleanup(){
+      clearTimeout(timer);
+      el.removeEventListener(event,ok);
+      el.removeEventListener("error",fail);
+    }
+    function ok(){
+      cleanup();
+      resolve();
+    }
+    function fail(){
+      cleanup();
+      reject(Error("视频解码或定位失败"));
+    }
+
+    el.addEventListener(event,ok);
+    el.addEventListener("error",fail);
+
+    timer=setTimeout(()=>{
+      cleanup();
+      reject(Error(event+"等待超时"));
+    },timeout);
+
+    try{action();}
+    catch(e){cleanup();reject(e);}
+  });
+}
+
+async function loadVideo(file){
+  if(mediaUrl)URL.revokeObjectURL(mediaUrl);
+  mediaUrl=URL.createObjectURL(file);
+
+  await waitEvent(video,"loadedmetadata",()=>{
+    video.src=mediaUrl;
+    video.load();
+  });
+
+  if(!finite(video.duration)||video.duration<=0)
+    throw Error("视频时长无效");
+
+  if(video.duration>30)
+    throw Error("视频超过30秒，请先剪辑为单次测试视频");
+
+  video.pause();
+}
+
+async function seek(t){
+  if(Math.abs(video.currentTime-t)<.001&&video.readyState>=2)
+    return;
+
+  await waitEvent(video,"seeked",()=>{
+    video.currentTime=t;
+  },12000);
+}
+
+const sub=(a,b)=>[a.x-b.x,a.y-b.y,a.z-b.z];
+const norm=a=>Math.hypot(...a);
+const dist=(a,b)=>norm(sub(a,b));
+
+function cross(a,b){
+  return [
+    a[1]*b[2]-a[2]*b[1],
+    a[2]*b[0]-a[0]*b[2],
+    a[0]*b[1]-a[1]*b[0]
+  ];
+}
+
+function validLandmarks(a){
+  return Array.isArray(a)&&a.length===21&&
+    a.every(p=>[p.x,p.y,p.z].every(finite));
+}
+
+function packLandmarks(a){
+  return a.map(p=>[p.x,p.y,p.z]);
+}
+
+function extractHand(inference,t,requested){
+  const image=inference.landmarks?.[0];
+  const world=inference.worldLandmarks?.[0];
+
+  if(!validLandmarks(image)||!validLandmarks(world)){
+    return {t,requested_time_s:requested,detected:false,signal:null};
+  }
+
+  const palmScale=dist(world[0],world[9]);
+
+  if(!finite(palmScale)||palmScale<1e-6){
+    return {t,requested_time_s:requested,detected:false,signal:null};
+  }
+
+  // 四指伸展指数：MCP到指尖的直线距离
+  // 除以三个指骨分段长度之和。
+  const fingers=[];
+  for(const mcp of [5,9,13,17]){
+    const chain=dist(world[mcp],world[mcp+1])+
+      dist(world[mcp+1],world[mcp+2])+
+      dist(world[mcp+2],world[mcp+3]);
+
+    fingers.push(chain>1e-8?
+      clamp(dist(world[mcp],world[mcp+3])/chain,0,1):null);
+  }
+
+  if(fingers.some(v=>!finite(v))){
+    return {t,requested_time_s:requested,detected:false,signal:null};
+  }
+
+  const extension=mean(fingers);
+
+  // 掌部法向量为模型估计方向，
+  // 不等于经过物理标定的前臂旋转角度。
+  const n=cross(sub(world[5],world[0]),sub(world[17],world[0]));
+  const magnitude=norm(n);
+
+  if(magnitude<1e-8){
+    return {t,requested_time_s:requested,detected:false,signal:null};
+  }
+
+  const palmNormal=n.map(x=>x/magnitude);
+  const handedness=inference.handedness?.[0]?.[0];
+
+  return {
+    t,
+    requested_time_s:requested,
+    detected:true,
+    signal:mode==="open"?extension:palmNormal[2],
+    extension_index:extension,
+    finger_extension:fingers,
+    palm_normal:palmNormal,
+    palm_normal_z:palmNormal[2],
+    palm_scale:palmScale,
+    detected_handedness:handedness?.categoryName||null,
+    handedness_score:handedness?.score??null,
+    image_landmarks:packLandmarks(image),
+    world_landmarks:packLandmarks(world)
+  };
+}
+
+// ======================================================
+// 5. 完整运动周期识别
+// ======================================================
+
+function segmentCycles(seg,lo,hi,taskMode,segmentId){
+  const sm=seg.map((p,i)=>({
+    ...p,
+    s:median(seg.slice(
+      Math.max(0,i-1),
+      Math.min(seg.length,i+2)
+    ).map(q=>q.signal))
+  }));
+
+  let best=null,ext=[];
+
+  for(const p of sm){
+    if(!best){
+      if(p.s<=lo)best={...p,kind:"low"};
+      else if(p.s>=hi)best={...p,kind:"high"};
+      continue;
+    }
+
+    if(best.kind==="low"){
+      if(p.s<best.s)best={...p,kind:"low"};
+      else if(p.s>=hi){
+        ext.push(best);
+        best={...p,kind:"high"};
+      }
+    }else{
+      if(p.s>best.s)best={...p,kind:"high"};
+      else if(p.s<=lo){
+        ext.push(best);
+        best={...p,kind:"low"};
+      }
+    }
+  }
+
+  if(best)ext.push(best);
+
+  const cycles=[];
+  let i=taskMode==="open"&&ext[0]?.kind==="high"?1:0;
+
+  for(;i+2<ext.length;i+=2){
+    const [a,b,c]=ext.slice(i,i+3);
+    const d1=b.t-a.t,d2=c.t-b.t;
+
+    if(d1<=0||d2<=0)continue;
+
+    const r1=Math.abs(b.s-a.s);
+    const r2=Math.abs(c.s-b.s);
+
+    cycles.push({
+      segment:segmentId,
+      start_s:a.t,
+      peak_s:b.t,
+      end_s:c.t,
+      duration_ms:(c.t-a.t)*1000,
+      amplitude:(r1+r2)/2,
+      phase1_speed:r1/d1,
+      phase2_speed:r2/d2,
+      mean_speed:(r1+r2)/(d1+d2),
+      start_endpoint:a.kind
+    });
+  }
+  return cycles;
+}
+
+function analyzeHand(frames,meta){
+  const good=frames.filter(f=>f.detected&&finite(f.signal));
+  const fraction=frames.length?good.length/frames.length:0;
+
+  const signals=good.map(f=>f.signal);
+  const q10=quantile(signals,.1);
+  const q90=quantile(signals,.9);
+  const range=finite(q10)&&finite(q90)?q90-q10:0;
+
+  const flags=["源视频实际帧率未验证"];
+
+  if(fraction<.7)flags.push("关键点检出率不足70%");
+  if(range<.12)flags.push("有效运动幅度变化不足");
+
+  let low,high;
+
+  if(mode==="open"){
+    low=(q10??0)+.25*range;
+    high=(q10??0)+.65*range;
+  }else{
+    low=-.30;
+    high=.30;
+
+    if(!(q10<-.20&&q90>.20)){
+      flags.push("未充分观察到手掌朝向的正负转换");
+    }
+  }
+
+  // 按连续有效采样区间分段。
+  // 不跨越关键点缺失区间构造完整运动周期。
+  const segments=[];
+  let seg=[];
+
+  for(const f of frames){
+    if(!f.detected||!finite(f.signal)){
+      if(seg.length)segments.push(seg);
+      seg=[];
+      continue;
+    }
+
+    if(seg.length&&(
+      f.t<=seg[seg.length-1].t||
+      f.t-seg[seg.length-1].t>2.5/meta.requested_sampling_fps
+    )){
+      segments.push(seg);
+      seg=[];
+    }
+    seg.push(f);
+  }
+
+  if(seg.length)segments.push(seg);
+  if(segments.length>1)flags.push("存在分段或关键点缺失");
+
+  let cycles=[];
+  if(range>=.12){
+    segments.forEach((s,i)=>{
+      if(s.length>=4)
+        cycles.push(...segmentCycles(s,low,high,mode,i+1));
+    });
+  }
+
+  cycles=cycles.map((c,i)=>({...c,cycle:i+1}));
+
+  const durations=cycles.map(c=>c.duration_ms);
+  const amps=cycles.map(c=>c.amplitude);
+  const speeds=cycles.map(c=>c.mean_speed);
+  const med=median(durations);
+
+  cycles.forEach(c=>{
+    c.flag=cycles.length>=3&&c.duration_ms>2*med?
+      "异常长周期候选":"未触发长周期规则";
+  });
+
+  const orientationOK=mode!=="rotate"||
+    (q10<-.20&&q90>.20);
+
+  const valid=fraction>=.7&&range>=.12&&
+    cycles.length>=1&&orientationOK;
+
+  // 不跨缺失区间计算递减趋势。
+  const trendOK=valid&&cycles.length>=6&&
+    new Set(cycles.map(c=>c.segment)).size===1&&
+    segments.length===1;
+
+  if(!cycles.length)flags.push("未识别完整往返周期");
+  if(!trendOK)flags.push("数据不足或不连续，递减趋势不报告");
+
+  return {
+    meta,
+    task:mode==="open"?"hand_open_close":"pronation_supination",
+    valid,
+    quality_flags:flags,
+    parameters:{
+      smoothing:"median_3",
+      threshold_low:low,
+      threshold_high:high,
+      detection_fraction_min:.7,
+      signal_range_min:.12,
+      minimum_trend_cycles:6,
+      long_cycle_median_multiplier:2
+    },
+    summary:{
+      detected_fraction_pct:fraction*100,
+      candidate_cycles:cycles.length,
+      complete_cycles:valid?cycles.length:null,
+      mean_amplitude:valid?mean(amps):null,
+      amplitude_cv_pct:valid?cv(amps):null,
+      mean_speed:valid?mean(speeds):null,
+      speed_cv_pct:valid?cv(speeds):null,
+      mean_cycle_ms:valid?mean(durations):null,
+      cycle_cv_pct:valid?cv(durations):null,
+      amplitude_decrement_pct:trendOK?decrement(amps):null,
+      speed_decrement_pct:trendOK?decrement(speeds):null,
+      amplitude_slope:trendOK?slope(amps):null,
+      speed_slope:trendOK?slope(speeds):null,
+      mean_phase1_speed:valid?
+        mean(cycles.map(c=>c.phase1_speed)):null,
+      mean_phase2_speed:valid?
+        mean(cycles.map(c=>c.phase2_speed)):null,
+      long_cycle_candidates:valid?
+        cycles.filter(c=>c.flag==="异常长周期候选").length:null,
+      segments:segments.length,
+      trend_valid:trendOK
+    },
+    frames,
+    cycles
+  };
+}
+
+// ======================================================
+// 6. 运行视频分析
+// ======================================================
+
+$("runVideo").addEventListener("click",async()=>{
+  const file=$("videoFile").files[0];
+
+  if(!file){
+    status("videoStatus","请先选择视频文件。",true);
+    return;
+  }
+
+  resetResult();
+  cancelled=false;
+  $("progress").value=0;
+  $("runVideo").disabled=true;
+  $("cancelVideo").disabled=false;
+  $("videoFile").disabled=true;
+  $("fps").disabled=true;
+
+  let model=null;
+  const meta=metadata();
+
+  try{
+    await loadVideo(file);
+
+    meta.file_name=file.name;
+    meta.video_duration_s=video.duration;
+    meta.requested_sampling_fps=Number($("fps").value);
+    meta.source_fps_verified=false;
+    meta.video_width=video.videoWidth;
+    meta.video_height=video.videoHeight;
+
+    const fps=meta.requested_sampling_fps;
+    const total=Math.floor(video.duration*fps);
+
+    if(total<15)
+      throw Error("视频过短，采样点不足");
+
+    offscreen.width=Math.min(640,video.videoWidth);
+    offscreen.height=Math.round(
+      offscreen.width*video.videoHeight/video.videoWidth
+    );
+
+    if(!offscreen.width||!offscreen.height)
+      throw Error("无法获取视频宽高");
+
+    model=await initializeModel();
+
+    video.controls=false;
+    const frames=[];
+    let lastT=-Infinity;
+
+    for(let i=0;i<total;i++){
+      if(cancelled)throw Error("本次分析已取消");
+
+      const requested=Math.min(
+        (i+.5)/fps,video.duration-.001
+      );
+
+      await seek(requested);
+      const t=video.currentTime;
+
+      if(!finite(t)||t<=lastT){
+        frames.push({
+          t:requested,
+          requested_time_s:requested,
+          detected:false,
+          signal:null,
+          invalid_reason:"非递增视频定位时间"
+        });
+        continue;
+      }
+
+      lastT=t;
+
+      vctx.drawImage(
+        video,0,0,offscreen.width,offscreen.height
+      );
+
+      const inference=model.detectForVideo(
+        offscreen,(i+1)*1000/fps
+      );
+
+      frames.push(extractHand(inference,t,requested));
+
+      if(i%5===0||i===total-1){
+        $("progress").value=(i+1)/total*100;
+
+        status("videoStatus",
+          "正在分析："+(i+1)+"/"+total+" 个采样位置"
+        );
+
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+
+    result=analyzeHand(frames,meta);
+    showResult();
+
+    status("videoStatus",
+      "分析完成，请检查质量提示及完整周期数。"
+    );
+
+  }catch(e){
+    status("videoStatus",
+      "分析未完成："+(e.message||String(e)),true
+    );
+  }finally{
+    try{model?.close();}catch(e){}
+    video.controls=true;
+    $("runVideo").disabled=false;
+    $("cancelVideo").disabled=true;
+    $("videoFile").disabled=false;
+    $("fps").disabled=false;
+  }
+});
+
+$("cancelVideo").addEventListener("click",()=>{
+  cancelled=true;
+  status("videoStatus","正在取消，请勿关闭或重复启动分析。");
+});
+
+// ======================================================
+// 7. 绘制结果图
+// ======================================================
+
+function plot(id,data,xLabel,yLabel){
+  const c=$(id),ctx=c.getContext("2d");
+  const w=c.width,h=c.height;
+  ctx.clearRect(0,0,w,h);
+
+  const a=data.filter(p=>finite(p.x)&&finite(p.y));
+  if(a.length<2){
+    ctx.fillStyle="#9fb0c3";
+    ctx.fillText("数据不足",40,40);
+    return;
+  }
+
+  let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
+
+  for(const p of a){
+    xmin=Math.min(xmin,p.x);
+    xmax=Math.max(xmax,p.x);
+    ymin=Math.min(ymin,p.y);
+    ymax=Math.max(ymax,p.y);
+  }
+
+  const padY=Math.max((ymax-ymin)*.1,.01);
+  ymin-=padY;
+  ymax+=padY;
+
+  const X=x=>65+(x-xmin)/Math.max(xmax-xmin,1e-8)*(w-90);
+  const Y=y=>h-45-(y-ymin)/(ymax-ymin)*(h-75);
+
+  ctx.font="13px sans-serif";
+  ctx.strokeStyle="#34465a";
+  ctx.fillStyle="#9fb0c3";
+  ctx.lineWidth=1;
+
+  for(let i=0;i<=4;i++){
+    const val=ymin+(ymax-ymin)*i/4;
+    const y=Y(val);
+
+    ctx.beginPath();
+    ctx.moveTo(65,y);
+    ctx.lineTo(w-25,y);
+    ctx.stroke();
+    ctx.fillText(val.toFixed(2),10,y+4);
+
+    const xv=xmin+(xmax-xmin)*i/4;
+    ctx.fillText(xv.toFixed(1),X(xv)-12,h-23);
+  }
+
+  ctx.fillText(yLabel,65,15);
+  ctx.fillText(xLabel,w-120,h-5);
+
+  ctx.strokeStyle="#23c9ad";
+  ctx.lineWidth=2.5;
+  ctx.beginPath();
+
+  let previous=null;
+
+  for(const p of data){
+    if(!finite(p.x)||!finite(p.y)){
+      previous=null;
+      continue;
+    }
+
+    if(!previous||p.group!==previous.group||p.breakBefore)
+      ctx.moveTo(X(p.x),Y(p.y));
+    else ctx.lineTo(X(p.x),Y(p.y));
+
+    previous=p;
+  }
+  ctx.stroke();
+}
+
+const traceCards=[
+  ["elapsed_s","总时间","秒"],
+  ["mean_speed","平均绘制速度","归一化距离/秒"],
+  ["speed_cv_pct","绘制速度CV","%"],
+  ["mean_path_error","平均轨迹偏差","归一化距离"],
+  ["rmse_path_error","轨迹RMSE","归一化距离"],
+  ["target_coverage_pct","路径覆盖率","%"],
+  ["path_length","绘制路径长度","归一化距离"],
+  ["lift_count","手指抬起次数","次"],
+  ["low_displacement_gap_candidates","低位移长间隔候选","次"],
+  ["point_count","触点记录数","个"]
+];
+
+const handCards=[
+  ["detected_fraction_pct","关键点检出率","%"],
+  ["complete_cycles","完整运动周期","个"],
+  ["mean_amplitude","平均幅度","相对单位"],
+  ["amplitude_decrement_pct","幅度递减率","%"],
+  ["mean_speed","平均运动速度","相对单位/秒"],
+  ["speed_decrement_pct","速度递减率","%"],
+  ["mean_cycle_ms","平均周期","ms"],
+  ["cycle_cv_pct","周期CV","%"],
+  ["amplitude_cv_pct","幅度CV","%"],
+  ["speed_cv_pct","速度CV","%"],
+  ["long_cycle_candidates","异常长周期候选","次"],
+  ["amplitude_slope","幅度趋势斜率","/周期"]
+];
+
+function showResult(){
+  if(!result)return;
+
+  const trace=mode==="trace";
+  $("results").hidden=false;
+  $("charts").hidden=false;
+  $("exports").hidden=false;
+  $("cyclePanel").hidden=trace;
+  $("exportCycles").hidden=trace;
+
+  const quality=(result.valid?
+    "探索性计算已完成":"质量不足，结果需复核")+
+    "；"+(result.quality_flags.join("；")||"未触发当前质量规则");
+
+  $("quality").textContent=quality;
+  $("quality").className=result.valid?"ok":"error";
+
+  $("cards").replaceChildren();
+
+  const spec=trace?traceCards:handCards;
+
+  for(const [key,label,unit] of spec){
+    const box=document.createElement("div");
+    box.className="metric";
+
+    const name=document.createElement("small");
+    name.textContent=label;
+
+    const value=document.createElement("strong");
+    value.textContent=fmt(result.summary[key],2);
+
+    const unitNode=document.createElement("small");
+    unitNode.textContent=unit;
+
+    box.append(name,value,unitNode);
+    $("cards").appendChild(box);
+  }
+
+  $("resultNote").textContent=trace?
+    "轨迹距离按绘图区宽度归一化。覆盖率采用50个路径区间及3%宽度容差。低位移长间隔只是触屏事件候选，不能直接解释为临床停顿或震颤。":
+    "完整周期指一次端点到对侧端点再返回。递减率正值表示后半程降低。当前幅度和速度均为代理指标，不是毫米、真实旋转角度或临床评分。";
+
+  if(trace){
+    $("chartLabel1").textContent="200ms时间窗绘制速度";
+    plot("chart1",result.speed_series.map(p=>({
+      x:p.t,y:p.speed,group:p.stroke
+    })),"时间(s)","相对速度");
+
+    $("chart2Panel").hidden=true;
+    $("chart3Panel").hidden=true;
+  }else{
+    $("chart2Panel").hidden=false;
+    $("chart3Panel").hidden=false;
+
+    $("chartLabel1").textContent=mode==="open"?
+      "逐采样位置手部伸展指数":"逐采样位置手掌朝向代理信号";
+
+    plot("chart1",result.frames.map(f=>({
+      x:f.t,y:f.detected?f.signal:null,group:0
+    })),"时间(s)","相对信号");
+
+    $("chartLabel2").textContent="逐周期运动幅度";
+    plot("chart2",result.cycles.map(c=>({
+      x:c.cycle,y:c.amplitude,group:c.segment
+    })),"周期","相对幅度");
+
+    $("chartLabel3").textContent="逐周期平均运动速度";
+    plot("chart3",result.cycles.map(c=>({
+      x:c.cycle,y:c.mean_speed,group:c.segment
+    })),"周期","相对速度");
+
+    $("cycleRows").replaceChildren();
+
+    result.cycles.forEach(c=>{
+      const tr=document.createElement("tr");
+
+      [
+        c.cycle,fmt(c.start_s),fmt(c.duration_ms,1),
+        fmt(c.amplitude),fmt(c.mean_speed),
+        fmt(c.phase1_speed),fmt(c.phase2_speed),c.flag
+      ].forEach(v=>{
+        const td=document.createElement("td");
+        td.textContent=String(v);
+        tr.appendChild(td);
+      });
+
+      tr.style.cursor="pointer";
+      tr.addEventListener("click",()=>{
+        video.currentTime=c.start_s;
+        video.pause();
+        video.scrollIntoView({behavior:"smooth",block:"center"});
+      });
+
+      $("cycleRows").appendChild(tr);
+    });
+  }
+}
+
+// ======================================================
+// 8. 科研数据导出
+// ======================================================
+
+$("exportJSON").addEventListener("click",()=>{
+  if(result)download(
+    JSON.stringify(result,null,2),
+    filename()+"_full.json",
+    "application/json"
+  );
+});
+
+$("exportSummary").addEventListener("click",()=>{
+  if(!result)return;
+
+  const row={
+    ...result.meta,
+    task:result.task,
+    valid:result.valid,
+    ...result.summary,
+    quality_flags:result.quality_flags.join(";")
+  };
+
+  download(csv([row]),
+    filename()+"_summary.csv","text/csv;charset=utf-8");
+});
+
+$("exportRaw").addEventListener("click",()=>{
+  if(!result)return;
+
+  const rows=mode==="trace"?result.points:
+    result.frames.map(f=>{
+      const {
+        image_landmarks,world_landmarks,...rest
+      }=f;
+      return rest;
+    });
+
+  download(csv(rows),
+    filename()+"_raw.csv","text/csv;charset=utf-8");
+});
+
+$("exportCycles").addEventListener("click",()=>{
+  if(!result?.cycles)return;
+  download(csv(result.cycles),
+    filename()+"_cycles.csv","text/csv;charset=utf-8");
+});
+</script>
+</body>
+</html>
