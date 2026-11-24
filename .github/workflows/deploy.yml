@@ -34,15 +34,63 @@ jobs:
       - name: Build website and model assets
         run: npm run build
 
-      - name: Include V0.6 analysis page
+
+      - name: Include V0.6 and V0.7 analysis pages
         run: |
           test -d dist
           test -f dist/index.html
           test -f v06-analysis.html
+          test -f v07-video-module.js
+
           cp v06-analysis.html dist/v06-analysis.html
+          cp v06-analysis.html dist/v07.html
+          cp v07-video-module.js dist/v07-video-module.js
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("dist/v07.html")
+          s = p.read_text(encoding="utf-8")
+
+          assert "</body>" in s
+
+          s = s.replace(
+              "</body>",
+              '<script type="module" src="./v07-video-module.js"></script>\n</body>'
+          )
+
+          s = s.replace(
+              "PD Finger Motor Lab · V0.6",
+              "PD Finger Motor Lab · V0.7"
+          )
+
+          s = s.replace(
+              "原版对合次数",
+              "视频对合候选次数"
+          )
+
+          s = s.replace(
+              "原版检出率",
+              "手部关键点检出率"
+          )
+
+          s = s.replace(
+              'source_version:"0.5.1"',
+              'source_version:current.source_version||"0.5.1"'
+          )
+
+          p.write_text(s, encoding="utf-8")
+          PY
+
           test -s dist/v06-analysis.html
-          echo "V0.6 analysis page included."
-          ls -lh dist/v06-analysis.html
+          test -s dist/v07.html
+          test -s dist/v07-video-module.js
+          test -s dist/vendor/vision_bundle.mjs
+          test -d dist/vendor/wasm
+          test -s dist/model/hand_landmarker.task
+
+          echo "V0.6 and V0.7 pages prepared."
+
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
