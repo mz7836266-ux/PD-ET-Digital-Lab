@@ -91,6 +91,20 @@ jobs:
 
           echo "V0.6 and V0.7 pages prepared."
 
+      - name: Include additional motor task pages
+        run: |
+          test -f motor-tasks.html
+          cp motor-tasks.html dist/spiral-wave.html
+          cp motor-tasks.html dist/hand-open.html
+          cp motor-tasks.html dist/forearm-rotate.html
+
+          test -s dist/spiral-wave.html
+          test -s dist/hand-open.html
+          test -s dist/forearm-rotate.html
+
+          echo "Three new motor task pages prepared."
+
+
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
