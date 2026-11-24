@@ -1,0 +1,475 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PD Finger Motor Lab V0.6</title>
+<style>
+:root{font-family:system-ui,"Microsoft YaHei",sans-serif;color:#e8edf5;background:#101722}
+*{box-sizing:border-box}
+body{margin:0;padding:22px}
+main{max-width:1100px;margin:auto}
+h1{font-size:clamp(24px,4vw,35px);margin:0 0 8px}
+h2{font-size:19px;margin:4px 0 16px}
+p{color:#a9b8c9;line-height:1.7}
+.panel{background:#1a2534;border:1px solid #314257;border-radius:16px;padding:20px;margin:18px 0}
+input,select,button{font:inherit;border-radius:9px;padding:11px}
+input,select{background:#101722;color:#e8edf5;border:1px solid #536477;max-width:100%}
+button{background:#13a88d;color:#071a19;border:0;font-weight:700;cursor:pointer;margin:5px 7px 5px 0}
+button:disabled{opacity:.4;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.metric{background:#111d2b;padding:14px;border-radius:11px}
+.metric .value{font-size:24px;font-weight:750;margin:8px 0}
+.metric .label{font-size:12px;color:#9aaec1}
+.small{font-size:12px}
+.note{background:#273743;border-left:3px solid #13a88d;padding:12px;border-radius:6px;color:#c5d4de}
+.error{color:#ff9292}
+.ok{color:#69d8bc}
+svg{display:block;width:100%;height:auto}
+.chart{width:100%;min-height:175px}
+.tablewrap{overflow:auto;max-height:430px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:10px;border-bottom:1px solid #354357;text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:#253243}
+label{display:block;color:#c5d4de;margin-bottom:7px}
+.flex{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+.flex>div{flex:1;min-width:200px}
+@media(max-width:700px){body{padding:10px}.panel{padding:13px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.metric .value{font-size:19px}}
+</style>
+</head>
+<body>
+<main>
+<h1>PD Finger Motor Lab · V0.6</h1>
+<p>手指对合逐周期运动学分析｜本地 JSON 导入｜科研原型，不用于临床诊断</p>
+
+<section class="panel">
+  <h2>1. 导入原始数据</h2>
+  <div class="flex">
+    <div>
+      <label for="file">V0.5.1 完整 JSON 文件</label>
+      <input id="file" type="file" accept=".json,application/json">
+    </div>
+    <div>
+      <label for="record">选择测试视频</label>
+      <select id="record" style="width:100%"></select>
+    </div>
+  </div>
+  <p id="status" class="small">请导入原网站导出的 *_full.json 文件。</p>
+  <p class="note small">文件仅在当前浏览器内计算，不上传至服务器。原始视频未包含在 JSON 中，因此本页面不提供视频同步播放。</p>
+</section>
+
+<section class="panel" id="results" hidden>
+  <h2>2. 运动学汇总</h2>
+  <p id="quality"></p>
+  <div class="grid" id="metrics"></div>
+  <p class="small" id="definitions"></p>
+</section>
+
+<section class="panel" id="charts" hidden>
+  <h2>3. 运动曲线</h2>
+  <p>逐周期幅度（归一化距离差）</p>
+  <svg class="chart" id="ampChart" viewBox="0 0 720 190"></svg>
+  <p>逐周期平均运动速度（归一化距离/秒）</p>
+  <svg class="chart" id="speedChart" viewBox="0 0 720 190"></svg>
+  <p>原始逐帧指尖距离</p>
+  <svg class="chart" id="rawChart" viewBox="0 0 720 190"></svg>
+</section>
+
+<section class="panel" id="details" hidden>
+  <h2>4. 周期明细</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>周期</th><th>起始(s)</th><th>时长(ms)</th>
+        <th>幅度</th><th>打开速度</th><th>闭合速度</th>
+        <th>平均速度</th><th>标记</th>
+      </tr></thead>
+      <tbody id="cycleRows"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" id="exports" hidden>
+  <h2>5. 导出分析结果</h2>
+  <button id="csvCycles">下载 cycles.csv</button>
+  <button id="csvSummary">下载 summary.csv</button>
+  <button id="jsonResult">下载 V0.6 分析 JSON</button>
+  <p class="small">原 V0.5.1 数据不会修改。V0.6 的幅度计算口径是“最大张开距离减去闭合基线”，不应与旧版事件幅度数值直接混用。</p>
+</section>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const finite=x=>typeof x==="number" && Number.isFinite(x);
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const median=a=>{
+  if(!a.length)return null;
+  const b=[...a].sort((x,y)=>x-y),i=Math.floor(b.length/2);
+  return b.length%2?b[i]:(b[i-1]+b[i])/2;
+};
+const cv=a=>{
+  if(a.length<2)return null;
+  const m=avg(a);
+  if(!finite(m)||Math.abs(m)<1e-10)return null;
+  return Math.sqrt(avg(a.map(x=>(x-m)**2)))/Math.abs(m)*100;
+};
+const slope=a=>{
+  if(a.length<3)return null;
+  const n=a.length,mx=(n+1)/2,my=avg(a);
+  let numerator=0,denominator=0;
+  a.forEach((v,i)=>{
+    numerator+=(i+1-mx)*(v-my);
+    denominator+=(i+1-mx)**2;
+  });
+  return denominator?numerator/denominator:null;
+};
+const fmt=(n,d=2)=>finite(n)?n.toFixed(d):"—";
+const percentDrop=a=>{
+  if(a.length<6)return null;
+  const h=Math.floor(a.length/2);
+  const first=avg(a.slice(0,h)),last=avg(a.slice(-h));
+  return first>1e-9?(first-last)/first*100:null;
+};
+const escCsv=x=>{
+  let s=x==null?"":String(x);
+  return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+};
+const csv=(rows,fields)=>{
+  const lines=[fields.join(",")];
+  rows.forEach(r=>lines.push(fields.map(k=>escCsv(r[k])).join(",")));
+  return "\uFEFF"+lines.join("\r\n");
+};
+function download(content,name,mime){
+  const blob=new Blob([content],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+
+let records=[],analyses=[],current=null;
+function analyze(r){
+  const old=r.metrics||{};
+  const base={
+    record_id:r.record_id||"",
+    subject_id:r.subject_id||"",
+    side:r.side||"",
+    file_name:r.file_name||"",
+    original_count:old.count??null,
+    detected_fraction:r.detected_fraction??null,
+    original_valid:old.valid===true,
+    fps_verified:r.source_fps_verified===true,
+    quality_flags:r.quality_flags||[]
+  };
+  const result={...base,valid:false,cycles:[],summary:null,frames:[],reason:""};
+  if(old.valid!==true || (finite(r.detected_fraction)&&r.detected_fraction<.7)){
+    result.reason="原版质量控制未通过；不计算V0.6运动学指标";
+    return result;
+  }
+  const events=(old.events||[])
+    .filter(e=>finite(e.time_s))
+    .sort((a,b)=>a.time_s-b.time_s);
+  const raw=(r.raw_frames||[])
+    .map(f=>({
+      t:Number(f.actual_video_time_s??f.t),
+      d:Number(f.d)
+    }))
+    .filter(f=>finite(f.t)&&finite(f.d))
+    .sort((a,b)=>a.t-b.t);
+  const intervals=raw.slice(1)
+    .map((f,i)=>f.t-raw[i].t)
+    .filter(x=>x>0);
+  const dt=median(intervals);
+  if(events.length<4||raw.length<15||!finite(dt)||dt<=0){
+    result.reason="缺少足够的事件或逐帧数据";
+    return result;
+  }
+
+  // 三点中值滤波：仅用于抑制单帧突变，保留原始 d。
+  const frames=raw.map((f,i)=>({
+    ...f,
+    smooth:median(
+      raw.slice(Math.max(0,i-1),Math.min(raw.length,i+2))
+        .map(v=>v.d)
+    )
+  }));
+  result.frames=frames;
+  const cycles=[];
+  for(let k=0;k<events.length-1;k++){
+    const t0=events[k].time_s,t1=events[k+1].time_s;
+    const T=t1-t0;
+    if(T<.10||T>3)continue;
+    const s=frames.filter(
+      f=>f.t>=t0-.6*dt && f.t<=t1+.6*dt
+    );
+    if(s.length<4)continue;
+    const gap=s.some((f,i)=>
+      i>0 && f.t-s[i-1].t>Math.max(.12,2.5*dt)
+    );
+    if(gap)continue;
+    let p=0;
+    for(let i=1;i<s.length;i++){
+      if(s[i].smooth>s[p].smooth)p=i;
+    }
+    if(p<1||p>=s.length-1)continue;
+    const a=s[0],peak=s[p],b=s[s.length-1];
+    const openDuration=peak.t-a.t;
+    const closeDuration=b.t-peak.t;
+    if(openDuration<=0||closeDuration<=0)continue;
+    const rise=peak.smooth-a.smooth;
+    const fall=peak.smooth-b.smooth;
+    const amp=(rise+fall)/2;
+    if(amp<.04||rise<=0||fall<=0)continue;
+
+    cycles.push({
+      record_id:result.record_id,
+      cycle:k+1,
+      start_s:t0,
+      end_s:t1,
+      duration_ms:T*1000,
+      amplitude:amp,
+      open_ms:openDuration*1000,
+      close_ms:closeDuration*1000,
+      opening_speed:rise/openDuration,
+      closing_speed:fall/closeDuration,
+      mean_speed:(rise+fall)/T,
+      quality:"通过"
+    });
+  }
+  result.cycles=cycles;
+  if(cycles.length<6){
+    result.reason="完整有效周期少于6个，不计算递减趋势";
+    return result;
+  }
+  const completion=cycles.length/(events.length-1);
+  if(completion<.70){
+    result.reason="可分析周期比例低于70%，建议人工检查";
+    return result;
+  }
+  const durations=cycles.map(c=>c.duration_ms);
+  const amps=cycles.map(c=>c.amplitude);
+  const speeds=cycles.map(c=>c.mean_speed);
+  const medDuration=median(durations);
+  cycles.forEach(c=>{
+    if(c.duration_ms>2*medDuration){
+      c.quality="异常长周期候选";
+    }
+  });
+  const w=3;
+  const baseAmp=avg(amps.slice(0,w));
+  const windows=amps.length>=2*w
+    ?Array.from({length:amps.length-w+1},(_,i)=>
+      avg(amps.slice(i,i+w))
+    ):[];
+
+  result.valid=true;
+  result.reason="已完成V0.6探索性运动学分析";
+  result.summary={
+    original_count:old.count,
+    full_cycles:cycles.length,
+    cycle_coverage_pct:completion*100,
+    mean_amplitude:avg(amps),
+    amplitude_cv_pct:cv(amps),
+    amplitude_decrement_pct:percentDrop(amps),
+    amplitude_slope_per_cycle:slope(amps),
+    mean_speed:avg(speeds),
+    speed_cv_pct:cv(speeds),
+    speed_decrement_pct:percentDrop(speeds),
+    speed_slope_per_cycle:slope(speeds),
+    mean_cycle_ms:avg(durations),
+    cycle_cv_pct:cv(durations),
+    mean_opening_speed:avg(cycles.map(c=>c.opening_speed)),
+    mean_closing_speed:avg(cycles.map(c=>c.closing_speed)),
+    abnormal_long_cycle_count:cycles.filter(
+      c=>c.quality!=="通过"
+    ).length,
+    exploratory_local_drop_pct:windows.length&&baseAmp>0
+      ?Math.max(0,(baseAmp-Math.min(...windows))/baseAmp*100)
+      :null
+  };
+  return result;
+}
+function cell(v){
+  const td=document.createElement("td");
+  td.textContent=String(v);
+  return td;
+}
+function plot(id,values,xLabel){
+  const svg=$(id);
+  svg.replaceChildren();
+  const NS="http://www.w3.org/2000/svg";
+  const el=(tag,attrs)=>{
+    const node=document.createElementNS(NS,tag);
+    Object.entries(attrs).forEach(([k,v])=>node.setAttribute(k,v));
+    svg.appendChild(node);
+    return node;
+  };
+  const a=values.filter(f=>finite(f.y));
+  if(a.length<2)return;
+  let lo=Math.min(...a.map(f=>f.y));
+  let hi=Math.max(...a.map(f=>f.y));
+  const pad=Math.max((hi-lo)*.18,.02);
+  lo-=pad;hi+=pad;
+  const x0=Math.min(...a.map(f=>f.x));
+  const x1=Math.max(...a.map(f=>f.x));
+  const X=x=>45+(x-x0)/Math.max(x1-x0,1e-9)*655;
+  const Y=y=>155-(y-lo)/(hi-lo)*125;
+  for(let i=0;i<4;i++){
+    const y=25+i*43;
+    el("line",{x1:45,y1:y,x2:700,y2:y,
+      stroke:"#4d6074","stroke-opacity":".35"});
+  }
+  el("polyline",{
+    points:a.map(f=>X(f.x)+","+Y(f.y)).join(" "),
+    fill:"none",stroke:"#24c7a5","stroke-width":2.7,
+    "stroke-linejoin":"round"
+  });
+  const t=el("text",{x:50,y:178,fill:"#9aaec1","font-size":12});
+  t.textContent=xLabel;
+  const u=el("text",{x:50,y:16,fill:"#b9cfdf","font-size":12});
+  u.textContent="范围："+fmt(lo,3)+" ～ "+fmt(hi,3);
+}
+function showCards(summary,record){
+  const specs=[
+    ["原版对合次数",record.original_count,"次"],
+    ["完整可分析周期",summary.full_cycles,"周期"],
+    ["平均幅度",fmt(summary.mean_amplitude,3),"归一化距离"],
+    ["幅度递减率",fmt(summary.amplitude_decrement_pct),"%"],
+    ["平均运动速度",fmt(summary.mean_speed,3),"归一化距离/秒"],
+    ["速度递减率",fmt(summary.speed_decrement_pct),"%"],
+    ["平均周期",fmt(summary.mean_cycle_ms,1),"ms"],
+    ["周期变异CV",fmt(summary.cycle_cv_pct),"%"],
+    ["幅度变异CV",fmt(summary.amplitude_cv_pct),"%"],
+    ["幅度趋势斜率",fmt(summary.amplitude_slope_per_cycle,4),"/周期"],
+    ["速度趋势斜率",fmt(summary.speed_slope_per_cycle,4),"/周期"],
+    ["异常长周期候选",summary.abnormal_long_cycle_count,"次"]
+  ];
+  $("metrics").replaceChildren();
+  specs.forEach(([label,value,unit])=>{
+    const box=document.createElement("div");
+    box.className="metric";
+    const t=document.createElement("div");
+    t.className="label";t.textContent=label;
+    const v=document.createElement("div");
+    v.className="value";v.textContent=value;
+    const u=document.createElement("div");
+    u.className="label";u.textContent=unit;
+    box.append(t,v,u);$("metrics").appendChild(box);
+  });
+}
+function render(){
+  const index=Number($("record").value);
+  current=analyses[index];
+  if(!current)return;
+  $("results").hidden=false;
+  $("quality").textContent=
+    "原版检出率："+fmt(
+      current.detected_fraction==null?null:
+      current.detected_fraction*100,1
+    )+"%；"+current.reason+
+    (current.fps_verified?"":"；源视频帧率未完全验证");
+  $("metrics").replaceChildren();
+  $("definitions").textContent="";
+  ["charts","details","exports"].forEach(id=>$(id).hidden=true);
+  if(!current.valid){
+    $("quality").className="error";
+    return;
+  }
+  $("quality").className="ok";
+  showCards(current.summary,current);
+  $("definitions").textContent=
+    "递减率＝(前半程均值－后半程均值)/前半程均值×100%；负值表示后半程增大。"+
+    "异常长周期是时长超过个体周期中位数2倍的候选事件，不等于临床停顿。"+
+    "速度与幅度均为相对指标，不是毫米或毫米/秒。";
+  ["charts","details","exports"].forEach(id=>$(id).hidden=false);
+  plot("ampChart",current.cycles.map(c=>({
+    x:c.cycle,y:c.amplitude
+  })),"周期序号");
+  plot("speedChart",current.cycles.map(c=>({
+    x:c.cycle,y:c.mean_speed
+  })),"周期序号");
+  plot("rawChart",current.frames.map(f=>({
+    x:f.t,y:f.d
+  })),"视频时间（秒）");
+  const rows=$("cycleRows");
+  rows.replaceChildren();
+  current.cycles.forEach(c=>{
+    const tr=document.createElement("tr");
+    [
+      c.cycle,fmt(c.start_s,3),fmt(c.duration_ms,1),
+      fmt(c.amplitude,3),fmt(c.opening_speed,3),
+      fmt(c.closing_speed,3),fmt(c.mean_speed,3),c.quality
+    ].forEach(v=>tr.appendChild(cell(v)));
+    rows.appendChild(tr);
+  });
+}
+$("file").addEventListener("change",async e=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  try{
+    const obj=JSON.parse(await file.text());
+    records=(Array.isArray(obj.records)?obj.records:[obj])
+      .filter(r=>r.type==="video"&&r.task==="finger");
+    if(!records.length)throw Error(
+      "文件中没有V0.5.1的finger视频记录"
+    );
+    analyses=records.map(analyze);
+    $("record").replaceChildren();
+    records.forEach((r,i)=>{
+      const opt=document.createElement("option");
+      opt.value=i;
+      opt.textContent=(r.file_name||"视频"+(i+1))+
+        "｜"+(r.side||"未标侧")+"｜"+
+        (analyses[i].valid?"有效":"需复核");
+      $("record").appendChild(opt);
+    });
+    $("status").textContent=
+      "读取完成："+records.length+"段视频，其中"+
+      analyses.filter(r=>r.valid).length+"段可分析。";
+    render();
+  }catch(err){
+    $("status").textContent="导入失败："+err.message;
+    $("status").className="error";
+    ["results","charts","details","exports"]
+      .forEach(id=>$(id).hidden=true);
+  }
+});
+$("record").addEventListener("change",render);
+$("csvCycles").addEventListener("click",()=>{
+  if(!current?.valid)return;
+  const fields=["record_id","cycle","start_s","end_s",
+    "duration_ms","amplitude","open_ms","close_ms",
+    "opening_speed","closing_speed","mean_speed","quality"];
+  download(csv(current.cycles,fields),
+    "PD_V06_cycles.csv","text/csv;charset=utf-8");
+});
+$("csvSummary").addEventListener("click",()=>{
+  if(!current?.valid)return;
+  const row={record_id:current.record_id,
+    subject_id:current.subject_id,side:current.side,
+    ...current.summary};
+  download(csv([row],Object.keys(row)),
+    "PD_V06_summary.csv","text/csv;charset=utf-8");
+});
+$("jsonResult").addEventListener("click",()=>{
+  if(!current)return;
+  download(JSON.stringify({
+    analysis_version:"0.6-exploratory",
+    created_at:new Date().toISOString(),
+    source_version:"0.5.1",
+    source_record_id:current.record_id,
+    summary:current.summary,
+    cycles:current.cycles,
+    quality:{
+      valid:current.valid,
+      reason:current.reason,
+      detected_fraction:current.detected_fraction,
+      source_fps_verified:current.fps_verified
+    }
+  },null,2),"PD_V06_analysis.json","application/json");
+});
+</script>
+</body>
+</html>
